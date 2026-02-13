@@ -2,32 +2,60 @@ import inspect
 from functools import wraps
 from typing import get_type_hints
 import time
+import sys
+import types
+
+EXCLUDED_FUNCS = {
+	'auto_decorate_module',
+	'validate_from_annotations',
+	'wraps',
+	'get_type_hints'
+}
+_decorated = False
+
+
+def auto_decorate_module(module):
+	global _decorated
+
+	if _decorated:
+		return
+
+	_decorated = True
+
+	for name, obj in vars(module).items():
+		if (
+			isinstance(obj, types.FunctionType)
+			and name not in EXCLUDED_FUNCS
+		):
+			setattr(module, name, validate_from_annotations()(obj))
+
 
 def validate_from_annotations():
 	def decorator(func):
 		type_hints = func.__annotations__.copy()
-
 		check_return = 'return' in type_hints
+
 		if check_return:
 			raw_return_type = type_hints['return']
-			# Convert None to NoneType if return is defined
+			#? Convert None to NoneType if return is defined
 			return_type = type(None) if raw_return_type is None else raw_return_type
 		else:
-			return_type = None # else set to None (don't validate)
+			return_type = None #? else set to None (don't validate)
+
 		if not type_hints:
 			return func
 
 		sig = inspect.signature(func)
 		arg_names = list(sig.parameters)
 
-		# Precomputed positional checks
+		#* Precomputed positional checks
 		arg_check_list = [
 			(i, type_hints[name])
 			for i, name in enumerate(arg_names)
 			if name in type_hints
 		]
 
-		# Precomputed keyword checks
+		#* Precomputed keyword checks
 		kwarg_check_map = {
 			name: type_hints[name]
 			for name in arg_names
@@ -39,6 +67,7 @@ def validate_from_annotations():
 			for i, expected in arg_check_list:
 				if i >= len(args):
 					break
+
 				if not isinstance(args[i], expected):
 					raise TypeError(
 						f"Argument '{arg_names[i]}' expected '{expected.__name__}', got '{type(args[i]).__name__}'"
@@ -47,6 +76,7 @@ def validate_from_annotations():
 			if kwargs:
 				for name, value in kwargs.items():
 					expected = kwarg_check_map.get(name)
+
 					if expected and not isinstance(value, expected):
 						raise TypeError(
 							f"Argument '{name}' expected '{expected.__name__}', got '{type(value).__name__}'"
@@ -57,10 +87,12 @@ def validate_from_annotations():
 				return result
 
 			result_type = type(result)
+
 			if result_type != return_type:
 				raise TypeError(
 					f"Expected return '{return_type.__name__}', got '{result_type.__name__}'"
 				)
+
 			return result
 		return wrapper
 	return decorator
