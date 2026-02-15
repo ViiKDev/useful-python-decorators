@@ -14,7 +14,7 @@ EXCLUDED_FUNCS = {
 _decorated = False
 
 
-def auto_decorate_module(module):
+def auto_decorate_module(module=sys.modules['__main__']):
 	global _decorated
 
 	if _decorated:
